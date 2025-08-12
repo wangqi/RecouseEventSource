@@ -1,4 +1,4 @@
-// swift-tools-version: 5.10
+// swift-tools-version: 6.0
 
 import PackageDescription
 
@@ -9,19 +9,13 @@ let package = Package(
         .iOS(.v13),
         .tvOS(.v13),
         .watchOS(.v6),
-        .visionOS(.v1)
+        .visionOS(.v1),
     ],
     products: [
-        .library(
-            name: "EventSource",
-            targets: ["EventSource"]),
+        .library(name: "EventSource", targets: ["EventSource"]),
     ],
     targets: [
-        .target(
-            name: "EventSource",
-            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]),
-        .testTarget(
-            name: "EventSourceTests",
-            dependencies: ["EventSource"]),
+        .target(name: "EventSource", swiftSettings: [.enableExperimentalFeature("StaticExclusiveOnly")]),
+        .testTarget(name: "EventSourceTests", dependencies: ["EventSource"]),
     ]
 )
