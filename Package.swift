@@ -15,7 +15,7 @@ let package = Package(
         .library(name: "EventSource", targets: ["EventSource"]),
     ],
     targets: [
-        .target(name: "EventSource", swiftSettings: [.enableExperimentalFeature("StaticExclusiveOnly")]),
+        .target(name: "EventSource"),
         .testTarget(name: "EventSourceTests", dependencies: ["EventSource"]),
     ]
 )
