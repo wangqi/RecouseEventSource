@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "EventSource",
+    name: "RecouseEventSource",
     platforms: [
         .macOS(.v10_15),
         .iOS(.v13),
@@ -12,10 +12,10 @@ let package = Package(
         .visionOS(.v1),
     ],
     products: [
-        .library(name: "EventSource", targets: ["EventSource"]),
+        .library(name: "RecouseEventSource", targets: ["RecouseEventSource"]),
     ],
     targets: [
-        .target(name: "EventSource"),
-        .testTarget(name: "EventSourceTests", dependencies: ["EventSource"]),
+        .target(name: "RecouseEventSource"),
+        .testTarget(name: "RecouseEventSourceTests", dependencies: ["RecouseEventSource"]),
     ]
 )
