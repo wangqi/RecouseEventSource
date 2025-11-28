@@ -20,6 +20,9 @@ final class SessionDelegate: NSObject, URLSessionDataDelegate {
 
     private let internalStream = AsyncStream<Event>.makeStream()
 
+    // wangqi 2025-11-28: Add SSL bypass flag for proxy debugging
+    var bypassSSLValidation: Bool = false
+
     var eventStream: AsyncStream<Event> { internalStream.stream }
 
     func urlSession(
@@ -29,7 +32,7 @@ final class SessionDelegate: NSObject, URLSessionDataDelegate {
     ) {
         internalStream.continuation.yield(.didCompleteWithError(error))
     }
-    
+
     func urlSession(
         _ session: URLSession,
         dataTask: URLSessionDataTask,
@@ -38,12 +41,49 @@ final class SessionDelegate: NSObject, URLSessionDataDelegate {
     ) {
         internalStream.continuation.yield(.didReceiveResponse(response, completionHandler))
     }
-    
+
     func urlSession(
         _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive data: Data
     ) {
         internalStream.continuation.yield(.didReceiveData(data))
+    }
+
+    // wangqi 2025-11-28: Add SSL challenge handling for proxy debugging (mitmproxy, Charles)
+    // NOTE: This does NOT work on Mac Catalyst/iOS due to CFNetwork-level "strict TLS Trust evaluation".
+    // The delegate is called and returns .useCredential, but the connection still fails.
+    // See helper/docs/claude_api_tls_proxy_issue.md for details.
+    // To debug with mitmproxy, install the CA certificate on the device instead.
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        if bypassSSLValidation,
+           challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let serverTrust = challenge.protectionSpace.serverTrust {
+            let credential = URLCredential(trust: serverTrust)
+            completionHandler(.useCredential, credential)
+        } else {
+            completionHandler(.performDefaultHandling, nil)
+        }
+    }
+
+    // wangqi 2025-11-28: Add task-level SSL challenge handling
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        if bypassSSLValidation,
+           challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let serverTrust = challenge.protectionSpace.serverTrust {
+            let credential = URLCredential(trust: serverTrust)
+            completionHandler(.useCredential, credential)
+        } else {
+            completionHandler(.performDefaultHandling, nil)
+        }
     }
 }

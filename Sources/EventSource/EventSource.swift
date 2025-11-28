@@ -29,7 +29,7 @@ public struct EventSource: Sendable {
         case open = 1
         case closed = 2
     }
-    
+
     /// Event type.
     public enum EventType: Sendable {
         case error(Error)
@@ -44,6 +44,12 @@ public struct EventSource: Sendable {
 
     public var timeoutInterval: TimeInterval
 
+    // wangqi 2025-11-28: Add custom URLSessionConfiguration for proxy support
+    private let customConfiguration: URLSessionConfiguration?
+
+    // wangqi 2025-11-28: Add SSL bypass flag for proxy debugging
+    private let bypassSSLValidation: Bool
+
     public init(mode: Mode = .default, timeoutInterval: TimeInterval = 300) {
         self.init(mode: mode, eventParser: ServerEventParser(mode: mode), timeoutInterval: timeoutInterval)
     }
@@ -56,13 +62,48 @@ public struct EventSource: Sendable {
         self.mode = mode
         self.eventParser = eventParser
         self.timeoutInterval = timeoutInterval
+        self.customConfiguration = nil
+        self.bypassSSLValidation = false
+    }
+
+    // wangqi 2025-11-28: Add initializer with custom URLSessionConfiguration for proxy support
+    public init(
+        mode: Mode = .default,
+        eventParser: @autoclosure @escaping @Sendable () -> EventParser,
+        timeoutInterval: TimeInterval = 300,
+        urlSessionConfiguration: URLSessionConfiguration?,
+        bypassSSLValidation: Bool = false
+    ) {
+        self.mode = mode
+        self.eventParser = eventParser
+        self.timeoutInterval = timeoutInterval
+        self.customConfiguration = urlSessionConfiguration
+        self.bypassSSLValidation = bypassSSLValidation
+    }
+
+    // wangqi 2025-11-28: Add simpler initializer for proxy support without requiring EventParser
+    /// Creates an EventSource with custom URLSessionConfiguration for proxy support.
+    /// Uses the default ServerEventParser internally.
+    public init(
+        mode: Mode = .default,
+        timeoutInterval: TimeInterval = 300,
+        urlSessionConfiguration: URLSessionConfiguration?,
+        bypassSSLValidation: Bool = false
+    ) {
+        self.mode = mode
+        self.eventParser = { ServerEventParser(mode: mode) }
+        self.timeoutInterval = timeoutInterval
+        self.customConfiguration = urlSessionConfiguration
+        self.bypassSSLValidation = bypassSSLValidation
     }
 
     public func dataTask(for urlRequest: URLRequest) -> DataTask {
         DataTask(
             urlRequest: urlRequest,
             eventParser: eventParser(),
-            timeoutInterval: timeoutInterval
+            timeoutInterval: timeoutInterval,
+            customConfiguration: customConfiguration,
+            bypassSSLValidation: bypassSSLValidation
         )
     }
 }
@@ -138,13 +179,21 @@ public extension EventSource {
             }
         }
 
+        // wangqi 2025-11-28: Store custom configuration for proxy support
+        private let customConfiguration: URLSessionConfiguration?
+
+        // wangqi 2025-11-28: Store SSL bypass flag for proxy debugging
+        private let bypassSSLValidation: Bool
+
         private var urlSessionConfiguration: URLSessionConfiguration {
-            let configuration = URLSessionConfiguration.default
-            configuration.httpAdditionalHeaders = [
-                HTTPHeaderField.accept: Accept.eventStream,
-                HTTPHeaderField.cacheControl: CacheControl.noStore,
-                HTTPHeaderField.lastEventID: lastMessageId
-            ]
+            // wangqi 2025-11-28: Use custom configuration if provided, otherwise use default
+            let configuration = customConfiguration ?? URLSessionConfiguration.default
+            // Merge additional headers with existing ones
+            var headers = configuration.httpAdditionalHeaders as? [String: String] ?? [:]
+            headers[HTTPHeaderField.accept] = Accept.eventStream
+            headers[HTTPHeaderField.cacheControl] = CacheControl.noStore
+            headers[HTTPHeaderField.lastEventID] = lastMessageId
+            configuration.httpAdditionalHeaders = headers
             configuration.timeoutIntervalForRequest = self.timeoutInterval
             configuration.timeoutIntervalForResource = self.timeoutInterval
             return configuration
@@ -153,11 +202,15 @@ public extension EventSource {
         internal init(
             urlRequest: URLRequest,
             eventParser: EventParser,
-            timeoutInterval: TimeInterval
+            timeoutInterval: TimeInterval,
+            customConfiguration: URLSessionConfiguration? = nil,
+            bypassSSLValidation: Bool = false
         ) {
             self.urlRequest = urlRequest
             self._eventParser = Mutex(eventParser)
             self.timeoutInterval = timeoutInterval
+            self.customConfiguration = customConfiguration
+            self.bypassSSLValidation = bypassSSLValidation
         }
 
         /// Creates and returns event stream.
@@ -171,6 +224,8 @@ public extension EventSource {
 
             return AsyncStream { continuation in
                 let sessionDelegate = SessionDelegate()
+                // wangqi 2025-11-28: Set SSL bypass flag for proxy debugging
+                sessionDelegate.bypassSSLValidation = self.bypassSSLValidation
                 let urlSession = URLSession(
                     configuration: urlSessionConfiguration,
                     delegate: sessionDelegate,
